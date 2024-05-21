@@ -6,26 +6,10 @@ import (
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
+	"joins/model"
 	"log"
 	"net/http"
 )
-
-type JoindedTable struct {
-	Date       string `json:"date"`
-	Day        string `json:"day"`
-	Task       string `json:"task"`
-	IsComplete string `json:"is_complete"`
-}
-type Entry struct {
-	Date string `json:"date"`
-	Day  string `json:"day"`
-	Task string `json:"task"`
-}
-type JoinInput struct {
-	Table1     string `json:"table1"`
-	Table2     string `json:"table2"`
-	ForeignKey string `json:"foreignKey"`
-}
 
 var db *sql.DB
 
@@ -35,12 +19,12 @@ func read_func(res http.ResponseWriter, req *http.Request) {
 	query := "SELECT * FROM entries"
 	result, err := db.Query(query)
 	defer result.Close()
-	var output []Entry
+	var output []model.Entry
 	for result.Next() {
 		var a, b, c string
 		result.Scan(&a, &b, &c)
 		fmt.Printf("%s %s %s\n", a, b, c)
-		output = append(output, Entry{a, b, c})
+		output = append(output, model.Entry{a, b, c})
 	}
 	if err != nil {
 		res.WriteHeader(http.StatusInternalServerError)
@@ -50,7 +34,7 @@ func read_func(res http.ResponseWriter, req *http.Request) {
 
 func create_func(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json")
-	var new_entry Entry
+	var new_entry model.Entry
 	err := json.NewDecoder(req.Body).Decode(&new_entry)
 	stmt, err := db.Prepare("INSERT INTO entries (date, day, task) VALUES (?, ?, ?)")
 	if err != nil {
@@ -69,7 +53,7 @@ func create_func(res http.ResponseWriter, req *http.Request) {
 
 func update_func(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json")
-	var updated_entry Entry
+	var updated_entry model.Entry
 	err := json.NewDecoder(req.Body).Decode(&updated_entry)
 
 	stmt, err := db.Prepare("UPDATE entries SET task = ? WHERE date = ?")
@@ -83,7 +67,7 @@ func update_func(res http.ResponseWriter, req *http.Request) {
 
 func delete_func(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json")
-	var del_entry Entry
+	var del_entry model.Entry
 	err := json.NewDecoder(req.Body).Decode(&del_entry)
 	if err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
@@ -97,22 +81,11 @@ func delete_func(res http.ResponseWriter, req *http.Request) {
 
 func join_func(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json")
-	var Request JoinInput
-	json.NewDecoder(req.Body).Decode(&Request)
-	query := "SELECT * FROM " + Request.Table1 + " INNER JOIN " + Request.Table2 + " ON " + Request.Table1 + "." + Request.ForeignKey + " = " + Request.Table2 + "." + Request.ForeignKey
-	//temp, err := db.Prepare("SELECT * FROM ? INNER JOIN ? ON ? = ?")
-	result, err := db.Query(query)
-	if err != nil {
-		http.Error(res, err.Error(), http.StatusInternalServerError)
-	}
-	//leftKey := Request.Table1 + "." + Request.ForeignKey
-	//rightKey := Request.Table2 + "." + Request.ForeignKey
-	var output []JoindedTable
-	var a, b, c, d, e string
-	for result.Next() {
-		result.Scan(&a, &b, &c, &d, &e)
-		output = append(output, JoindedTable{a, b, d, e})
-	}
+	var v model.TableList
+	json.NewDecoder(req.Body).Decode(&v)
+	query := model.GetQuery(v)
+	fmt.Println(query)
+	output := model.JoinTable(query, db)
 	json.NewEncoder(res).Encode(output)
 }
 func main() {
@@ -122,7 +95,7 @@ func main() {
 
 	db, err = sql.Open("mysql", "root:@tcp(0.0.0.0:3306)/dbnew")
 	err = db.Ping()
-	_, err = db.Exec("CREATE TABLE entries2(date VARCHAR(20) PRIMARY KEY , iscompleted VARCHAR(5) );")
+	//_, err = db.Exec("CREATE TABLE entries3(date VARCHAR(20) PRIMARY KEY , wordCat VARCHAR(5) );")
 
 	if err != nil {
 		log.Fatal(err)
